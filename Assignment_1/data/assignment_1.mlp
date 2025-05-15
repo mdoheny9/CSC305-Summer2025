@@ -1,0 +1,18 @@
+<!DOCTYPE MeshLabDocument>
+<MeshLabProject>
+ <MeshGroup>
+  <MLMesh visible="1" filename="points.xyz" idInFile="-1" label="points.xyz">
+   <MLMatrix44>
+1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 
+</MLMatrix44>
+   <RenderingOption wireWidth="1" pointColor="252 233 79 255" wireColor="255 255 0 255" pointSize="3" boxColor="234 234 234 255" solidColor="192 192 192 255">000110000000000000000000000001000000001010000000000100111011110000101101</RenderingOption>
+  </MLMesh>
+  <MLMesh visible="1" filename="polygon.obj" idInFile="-1" label="polygon.obj">
+   <MLMatrix44>
+1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 
+</MLMatrix44>
+   <RenderingOption wireWidth="3" pointColor="252 233 79 255" wireColor="255 0 0 255" pointSize="3" boxColor="234 234 234 255" solidColor="192 192 192 255">001111000000010000000100000001000100000010100000110100111011110000001001</RenderingOption>
+  </MLMesh>
+ </MeshGroup>
+ <RasterGroup/>
+</MeshLabProject>
