@@ -28,13 +28,25 @@ bool intersect_segment(const Vector2d &a, const Vector2d &b, const Vector2d &c, 
     Vector2d cd = d - c;
     Vector2d ac = c - a;
 
-    double ab_cd = det(ab, cd);
+    double ab_cd = det(ab, cd); // use cross-product to determine if segments are parallel
 
     if (ab_cd == 0) { // segments are parallel, never intersect
         return false;
     } else {
+        // solve for t1 and t2 to find point of intersection
+        // to find point of intersection, set c + cd*t2 = a + ab*t1
+        //                                    c - a = ab*t1 - cd*t2 ; rearrange
+        //                                    ac = ab*t1 - cd*t2    ; c - a = ac
+        // ...
+        // solve system of equations
+        // ...
         double t1 = det(ac, cd)/ab_cd;
         double t2 = -det(ab, ac)/ab_cd;
+
+        // when t2 = 0, the intersection is at point c
+        // when t2 = 0, the intersection is at point d
+        // similarly for t1 wrt a and b
+        // thus for the intersection to be on the two line segments, 0 <= t1 <= 1 and 0 <= t2 <= 1
         return (0 <= t1 && t1 <= 1) && (0 <= t2 && t2 <= 1);
     }
 }
