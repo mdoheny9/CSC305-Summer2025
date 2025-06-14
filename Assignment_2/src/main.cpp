@@ -258,6 +258,11 @@ void raytrace_shading()
     MatrixXd C = MatrixXd::Zero(800, 800); // Store the color
     MatrixXd A = MatrixXd::Zero(800, 800); // Store the alpha mask
 
+    // New matrices for RGB channels
+    MatrixXd R = MatrixXd::Zero(800, 800);
+    MatrixXd G = MatrixXd::Zero(800, 800);
+    MatrixXd B = MatrixXd::Zero(800, 800);
+
     const Vector3d camera_origin(0, 0, 3);
     const Vector3d camera_view_direction(0, 0, -1);
 
@@ -274,6 +279,9 @@ void raytrace_shading()
     const Vector3d diffuse_color(1, 0, 1);
     const double specular_exponent = 100;
     const Vector3d specular_color(0., 0, 1);
+    // const Vector3d diffuse_color(0, 1, 1);
+    // const double specular_exponent = 100;
+    // const Vector3d specular_color(255, 0, 81);
 
     // Single light source
     const Vector3d light_position(-1, 1, 1);
@@ -295,8 +303,6 @@ void raytrace_shading()
             Vector3d ray_intersection;
             double t, a, b, c;
             if (intersect_sphere(ray_origin, ray_direction, sphere_center, sphere_radius, t, a, b, c, ray_intersection)) {
-            // if (true)
-            // {
                 // TODO: The ray hit the sphere, compute the exact intersection point
                 // -> calculated within intersect_sphere
 
@@ -304,23 +310,38 @@ void raytrace_shading()
                 Vector3d ray_normal = (ray_intersection - sphere_center).normalized();
 
                 // TODO: Add shading parameter here
-                const double diffuse = (light_position - ray_intersection).normalized().dot(ray_normal);
-                const double specular = (light_position - ray_intersection).normalized().dot(ray_normal);
+                // const double diffuse = (light_position - ray_intersection).normalized().dot(ray_normal);
+                // const double specular = (light_position - ray_intersection).normalized().dot(ray_normal);
+                Vector3d l = (light_position - ray_intersection).normalized();
+                Vector3d v = (camera_origin - ray_intersection).normalized();
+                Vector3d n = ray_normal;
+                Vector3d h = (v + l).normalized();
+
+                double diffuse = std::max(0.0, n.dot(l));
+                double specular = std::pow(std::max(0.0, n.dot(h)), specular_exponent);
 
                 // Simple diffuse model
                 C(i, j) = ambient + diffuse + specular;
+                R(i, j) = ambient + diffuse_color[0] * diffuse + specular_color[0] * specular;
+                G(i, j) = ambient + diffuse_color[1] * diffuse + specular_color[1] * specular;
+                B(i, j) = ambient + diffuse_color[2] * diffuse + specular_color[2] * specular;
 
                 // Clamp to zero
                 C(i, j) = std::max(C(i, j), 0.);
+                R(i, j) = std::max(R(i, j), 0.);
+                G(i, j) = std::max(G(i, j), 0.);
+                B(i, j) = std::max(B(i, j), 0.);
 
                 // Disable the alpha mask for this pixel
                 A(i, j) = 1;
+
+                
             }
         }
     }
 
     // Save to png
-    write_matrix_to_png(C, C, C, A, filename);
+    write_matrix_to_png(R, G, B, A, filename);
 }
 
 int main()
