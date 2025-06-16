@@ -49,7 +49,7 @@ void raytrace_sphere()
             // Intersect with the sphere
             // NOTE: this is a special case of a sphere centered in the origin and for orthographic rays aligned with the z axis
             // TODO change this with the generic case
-            double a = ray_direction.transpose() * ray_direction; // should be 1 if ray_direction normalized??? 
+            double a = ray_direction.transpose() * ray_direction;
             double b = 2 * ray_direction.transpose() * (ray_origin - sphere_center);
             double c = (ray_origin - sphere_center).transpose() * (ray_origin - sphere_center) - sphere_radius * sphere_radius;
             
@@ -86,17 +86,21 @@ void raytrace_sphere()
 }
 
 bool intersect_parallelogram(const Vector3d &ray_origin, const Vector3d &ray_direction, const Vector3d &pgram_origin, const Vector3d &pgram_u, const Vector3d &pgram_v, double &t, double &alpha, double &beta, Vector3d &ray_intersection) {
+    // using ray-plane intersection approach
     Vector3d normal = (pgram_u.cross(pgram_v)).normalized();
     if (normal.dot(ray_direction) == 0) {
-        return false;
+        return false; // ray is parallel to plane, no intersection
     }
 
+    // solve for t in the rays parametric form: ray_origin + t * ray_direction = point on plane
     t = (pgram_origin - ray_origin).dot(normal) / normal.dot(ray_direction);
-    if (t < 0) {
-        return false;
+    if (t < 0) { 
+        return false; // intersection is behind ray_origin, no intersection
     }
 
     ray_intersection = ray_origin + t * ray_direction;
+
+    // ray intersects if 0 <= alpha, beta and alpha + beta <= 1
     Vector3d p = ray_intersection - pgram_origin;
     Vector3d n = pgram_u.cross(pgram_v);
     alpha = n.dot(p.cross(pgram_v)) / n.dot(n);
@@ -279,9 +283,6 @@ void raytrace_shading()
     const Vector3d diffuse_color(1, 0, 1);
     const double specular_exponent = 100;
     const Vector3d specular_color(0., 0, 1);
-    // const Vector3d diffuse_color(0, 1, 1);
-    // const double specular_exponent = 100;
-    // const Vector3d specular_color(255, 0, 81);
 
     // Single light source
     const Vector3d light_position(-1, 1, 1);
@@ -310,18 +311,18 @@ void raytrace_shading()
                 Vector3d ray_normal = (ray_intersection - sphere_center).normalized();
 
                 // TODO: Add shading parameter here
-                // const double diffuse = (light_position - ray_intersection).normalized().dot(ray_normal);
-                // const double specular = (light_position - ray_intersection).normalized().dot(ray_normal);
                 Vector3d l = (light_position - ray_intersection).normalized();
                 Vector3d v = (camera_origin - ray_intersection).normalized();
                 Vector3d n = ray_normal;
                 Vector3d h = (v + l).normalized();
 
-                double diffuse = std::max(0.0, n.dot(l));
-                double specular = std::pow(std::max(0.0, n.dot(h)), specular_exponent);
+                double diffuse = std::max(0.0, n.dot(l)); // max(0, n · l)
+                double specular = std::pow(std::max(0.0, n.dot(h)), specular_exponent); // max(0, n · h)^p
 
                 // Simple diffuse model
                 C(i, j) = ambient + diffuse + specular;
+
+                // Using shading equation k_a I_a + k_d I max(0,n·l) + k_s I max(0, n·h)^p
                 R(i, j) = ambient + diffuse_color[0] * diffuse + specular_color[0] * specular;
                 G(i, j) = ambient + diffuse_color[1] * diffuse + specular_color[1] * specular;
                 B(i, j) = ambient + diffuse_color[2] * diffuse + specular_color[2] * specular;
