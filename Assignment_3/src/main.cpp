@@ -202,20 +202,33 @@ double ray_sphere_intersection(const Vector3d &ray_origin, const Vector3d &ray_d
 
     double t = -1;
 
-    if (false)
+    double a = ray_direction.transpose() * ray_direction;
+    double b = 2 * ray_direction.transpose() * (ray_origin - sphere_center);
+    double c = (ray_origin - sphere_center).transpose() * (ray_origin - sphere_center) - sphere_radius * sphere_radius;
+    
+    double discr = b * b - 4 * a * c;
+
+    if (discr < 0)
     {
         return -1;
     }
     else
     {
         //TODO set the correct intersection point, update p to the correct value
-        p = ray_origin;
-        N = ray_direction;
+        double t0 = (-b - sqrt(discr)) / (2 * a);
+        double t1 = (-b + sqrt(discr)) / (2 * a);
+        if (t0 > 0) {
+            t = t0;
+        } else if (t1 > 0) {
+            t = t1;
+        }
+        p = ray_origin + t * ray_direction;
+        N = (p - sphere_center).normalized();
 
         return t;
     }
 
-    return -1;
+    // return -1;
 }
 
 //Compute the intersection between a ray and a paralleogram, return -1 if no intersection
@@ -230,16 +243,32 @@ double ray_parallelogram_intersection(const Vector3d &ray_origin, const Vector3d
     const Vector3d pgram_u = A - pgram_origin;
     const Vector3d pgram_v = B - pgram_origin;
 
-    if (false)
+    Vector3d normal = (pgram_u.cross(pgram_v)).normalized();
+    if (normal.dot(ray_direction) == 0)
     {
         return -1;
     }
 
-    //TODO set the correct intersection point, update p and N to the correct values
-    p = ray_origin;
-    N = p.normalized();
+    double t = (pgram_origin - ray_origin).dot(normal) / normal.dot(ray_direction);
+    if (t < 0) { 
+        return -1; // intersection is behind ray_origin, no intersection
+    }
 
-    return -1;
+    //TODO set the correct intersection point, update p and N to the correct values
+    Vector3d ray_intersection = ray_origin + t * ray_direction;
+
+    Vector3d p_rel = ray_intersection - pgram_origin;
+    Vector3d n = pgram_u.cross(pgram_v);
+    double alpha = n.dot(p_rel.cross(pgram_v)) / n.dot(n);
+    double beta  = n.dot(pgram_u.cross(p_rel)) / n.dot(n);
+
+    if (alpha >= 0 && alpha <= 1 && beta >= 0 && beta <= 1) {
+        p = ray_intersection;
+        N = normal;
+        return t;
+    } else {
+        return -1;
+    }
 }
 
 //Finds the closest intersecting object returns its index
