@@ -25,7 +25,7 @@ const std::string filename("raytrace.png");
 const double focal_length = 10;
 const double field_of_view = 0.7854; //45 degrees
 const double image_z = 5;
-const bool is_perspective = false;
+const bool is_perspective = true;
 const Vector3d camera_position(0, 0, 5);
 const double camera_aperture = 0.05;
 
@@ -194,7 +194,7 @@ Vector4d procedural_texture(const double tu, const double tv)
 //Compute the intersection between a ray and a sphere, return -1 if no intersection
 double ray_sphere_intersection(const Vector3d &ray_origin, const Vector3d &ray_direction, int index, Vector3d &p, Vector3d &N)
 {
-    // TODO, implement the intersection between the ray and the sphere at index index.
+    // DONE, implement the intersection between the ray and the sphere at index index.
     //return t or -1 if no intersection
 
     const Vector3d sphere_center = sphere_centers[index];
@@ -214,7 +214,7 @@ double ray_sphere_intersection(const Vector3d &ray_origin, const Vector3d &ray_d
     }
     else
     {
-        //TODO set the correct intersection point, update p to the correct value
+        //DONE set the correct intersection point, update p to the correct value
         double t0 = (-b - sqrt(discr)) / (2 * a);
         double t1 = (-b + sqrt(discr)) / (2 * a);
         if (t0 > 0) {
@@ -234,7 +234,7 @@ double ray_sphere_intersection(const Vector3d &ray_origin, const Vector3d &ray_d
 //Compute the intersection between a ray and a paralleogram, return -1 if no intersection
 double ray_parallelogram_intersection(const Vector3d &ray_origin, const Vector3d &ray_direction, int index, Vector3d &p, Vector3d &N)
 {
-    // TODO, implement the intersection between the ray and the parallelogram at index index.
+    // DONE, implement the intersection between the ray and the parallelogram at index index.
     //return t or -1 if no intersection
 
     const Vector3d pgram_origin = parallelograms[index].col(0);
@@ -254,7 +254,7 @@ double ray_parallelogram_intersection(const Vector3d &ray_origin, const Vector3d
         return -1; // intersection is behind ray_origin, no intersection
     }
 
-    //TODO set the correct intersection point, update p and N to the correct values
+    //DONE set the correct intersection point, update p and N to the correct values
     Vector3d ray_intersection = ray_origin + t * ray_direction;
 
     Vector3d p_rel = ray_intersection - pgram_origin;
@@ -264,7 +264,7 @@ double ray_parallelogram_intersection(const Vector3d &ray_origin, const Vector3d
 
     if (alpha >= 0 && alpha <= 1 && beta >= 0 && beta <= 1) {
         p = ray_intersection;
-        N = normal;
+        N = -normal;
         return t;
     } else {
         return -1;
@@ -329,7 +329,14 @@ bool is_light_visible(const Vector3d &ray_origin, const Vector3d &ray_direction,
 {
     // TODO: Determine if the light is visible here
     // Use find_nearest_object
-    return true;
+    Vector3d obj_p, obj_n;
+    const double e = 1e-4;
+    if (find_nearest_object(ray_origin + e * ray_direction, ray_direction, obj_p, obj_n) < 0) {
+        return true;
+    }
+    const double dlight = (light_position - ray_origin).norm();
+    const double dhit = (obj_p - (ray_origin + e * ray_direction)).norm();
+    return dhit >= dlight;
 }
 
 Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction, int max_bounce)
@@ -358,37 +365,41 @@ Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction, in
         const Vector3d Li = (light_position - p).normalized();
 
         // TODO: Shoot a shadow ray to determine if the light should affect the intersection point and call is_light_visible
+        if (is_light_visible(p, Li, light_position)) {
+            Vector4d diff_color = obj_diffuse_color;
 
-        Vector4d diff_color = obj_diffuse_color;
+            if (nearest_object == 4)
+            {
+                //Compute UV coodinates for the point on the sphere
+                const double x = p(0) - sphere_centers[nearest_object][0];
+                const double y = p(1) - sphere_centers[nearest_object][1];
+                const double z = p(2) - sphere_centers[nearest_object][2];
+                double tu = acos(z / sphere_radii[nearest_object]) / 3.1415;
+                double tv = (3.1415 + atan2(y, x)) / (2 * 3.1415);
+                tu = std::min(tu, 1.0);
+                tu = std::max(tu, 0.0);
 
-        if (nearest_object == 4)
-        {
-            //Compute UV coodinates for the point on the sphere
-            const double x = p(0) - sphere_centers[nearest_object][0];
-            const double y = p(1) - sphere_centers[nearest_object][1];
-            const double z = p(2) - sphere_centers[nearest_object][2];
-            double tu = acos(z / sphere_radii[nearest_object]) / 3.1415;
-            double tv = (3.1415 + atan2(y, x)) / (2 * 3.1415);
-            tu = std::min(tu, 1.0);
-            tu = std::max(tu, 0.0);
+                tv = std::min(tv, 1.0);
+                tv = std::max(tv, 0.0);
 
-            tv = std::min(tv, 1.0);
-            tv = std::max(tv, 0.0);
+                diff_color = procedural_texture(tu, tv);
+            }
 
-            diff_color = procedural_texture(tu, tv);
+            // DONE: Add shading parameters
+
+            // Diffuse contribution
+            const Vector4d diffuse = diff_color * std::max(Li.dot(N), 0.0);
+
+            // Specular contribution, use obj_specular_color
+            const Vector3d v = (camera_position - p).normalized(); // view direction
+            const Vector3d h = (v + Li).normalized(); // half vector 
+            const double specular_term = std::max(h.dot(N), 0.0);
+            const Vector4d specular = obj_specular_color * pow(specular_term, obj_specular_exponent);
+
+            // Attenuate lights according to the squared distance to the lights
+            const Vector3d D = light_position - p;
+            lights_color += (diffuse + specular).cwiseProduct(light_color) / D.squaredNorm();
         }
-
-        // TODO: Add shading parameters
-
-        // Diffuse contribution
-        const Vector4d diffuse = diff_color * std::max(Li.dot(N), 0.0);
-
-        // Specular contribution, use obj_specular_color
-        const Vector4d specular(0, 0, 0, 0);
-
-        // Attenuate lights according to the squared distance to the lights
-        const Vector3d D = light_position - p;
-        lights_color += (diffuse + specular).cwiseProduct(light_color) / D.squaredNorm();
     }
 
     Vector4d refl_color = obj_reflection_color;
@@ -430,8 +441,8 @@ void raytrace_scene()
     // The sensor grid is at a distance 'focal_length' from the camera center,
     // and covers an viewing angle given by 'field_of_view'.
     double aspect_ratio = double(w) / double(h);
-    double image_y = 1; //TODO: compute the correct pixels size
-    double image_x = 1; //TODO: compute the correct pixels size
+    double image_y = tan(field_of_view / 2) * focal_length; //DONE: compute the correct pixels size
+    double image_x = aspect_ratio * image_y; //DONE: compute the correct pixels size
 
     // The pixel grid through which we shoot rays is at a distance 'focal_length'
     const Vector3d image_origin(-image_x, image_y, -image_z);
@@ -451,7 +462,9 @@ void raytrace_scene()
 
             if (is_perspective)
             {
-                // TODO: Perspective camera
+                // DONE: Perspective camera
+                ray_origin = camera_position;
+                ray_direction = (pixel_center - camera_position).normalized();
             }
             else
             {
