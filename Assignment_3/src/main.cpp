@@ -15,6 +15,8 @@
 // Shortcut to avoid Eigen:: everywhere, DO NOT USE IN .h
 using namespace Eigen;
 
+#include <random>
+
 ////////////////////////////////////////////////////////////////////////////////
 // Scene setup, global variables
 ////////////////////////////////////////////////////////////////////////////////
@@ -131,29 +133,33 @@ double lerp(double a0, double a1, double w)
     assert(w >= 0);
     assert(w <= 1);
     //TODO implement linear and cubic interpolation
-    return 0;
+    // return (1-w) * a0 + w * a1; // linear
+    return (a0 + w * (a1 - a0));
+    // return (a1 - a0) * (3.0 - w * 2.0) * w * w + a0; // cubic
 }
 
 // Computes the dot product of the distance and gradient vectors.
 double dotGridGradient(int ix, int iy, double x, double y)
 {
     //TODO: Compute the distance vector
+    double dx = x - (float)ix;
+    double dy = y - (float)iy;
     //TODO: Compute and return the dot-product
-    return 0;
+    return (dx * grid[iy][ix][0] + dy * grid[iy][ix][1]);
 }
 
 // Compute Perlin noise at coordinates x, y
 double perlin(double x, double y)
 {
     //TODO: Determine grid cell coordinates x0, y0
-    int x0 = 0;
+    int x0 = int(x);
     int x1 = x0 + 1;
-    int y0 = 0;
+    int y0 = int(y);
     int y1 = y0 + 1;
 
     // Determine interpolation weights
-    double sx = x - x0;
-    double sy = y - y0;
+    double sx = x - (float)x0;
+    double sy = y - (float)y0;
 
     // Interpolate between grid point gradients
     double n0 = dotGridGradient(x0, y0, x, y);
@@ -179,12 +185,12 @@ Vector4d procedural_texture(const double tu, const double tv)
     assert(tv <= 1);
 
     //TODO: uncomment these lines once you implement the perlin noise
-    // const double color = (perlin(tu * grid_size, tv * grid_size) + 1) / 2;
-    // return Vector4d(0, color, 0, 0);
+    const double color = (perlin(tu * grid_size, tv * grid_size) + 1) / 2;
+    return Vector4d(0, color, 0, 0);
 
     //Example fo checkerboard texture
-    const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
-    return Vector4d(0, color, 0, 0);
+    // const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
+    // return Vector4d(0, color, 0, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -227,8 +233,6 @@ double ray_sphere_intersection(const Vector3d &ray_origin, const Vector3d &ray_d
 
         return t;
     }
-
-    // return -1;
 }
 
 //Compute the intersection between a ray and a paralleogram, return -1 if no intersection
@@ -431,7 +435,9 @@ Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction, in
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
+inline double get_zero_to_one() {
+    return double(rand()) / RAND_MAX;
+} 
 void raytrace_scene()
 {
     std::cout << "Simple ray tracer." << std::endl;
@@ -455,6 +461,10 @@ void raytrace_scene()
     const Vector3d x_displacement(2.0 / w * image_x, 0, 0);
     const Vector3d y_displacement(0, -2.0 / h * image_y, 0);
 
+    // depth of field variables
+    const int n = 5;
+    const int N = n * n;
+
     for (unsigned i = 0; i < w; ++i)
     {
         for (unsigned j = 0; j < h; ++j)
@@ -462,24 +472,47 @@ void raytrace_scene()
             // TODO: Implement depth of field
             const Vector3d pixel_center = image_origin + (i + 0.5) * x_displacement + (j + 0.5) * y_displacement;
 
+            std::vector<Vector2d> r, s;
+
+            for (int k = 0; k < n; k++) {
+                for (int l = 0; l < n; l++) {
+                    // generate N = n^2 jittered 2D points and store in array r[]
+                    r.emplace_back((k + get_zero_to_one())/n, (l + get_zero_to_one())/n);
+
+                    // generate N = n^2 jittered 2D points and store in array s[]                  
+                    s.emplace_back(camera_aperture * (get_zero_to_one() - 0.5), camera_aperture * (get_zero_to_one() - 0.5));
+                }
+            }
+            // shuffle the points in array s[]
+            std::shuffle(s.begin(), s.end(), std::default_random_engine(std::rand()));
+
+            Vector4d C(0,0,0,0);
+
             // Prepare the ray
-            Vector3d ray_origin;
-            Vector3d ray_direction;
-
-            if (is_perspective)
-            {
-                // DONE: Perspective camera
-                ray_origin = camera_position;
-                ray_direction = (pixel_center - camera_position).normalized();
+            for (int p = 0; p < N; p++) {
+                Vector3d random_point = image_origin + (i + r[p].x()) * x_displacement + (i + r[p].y()) * y_displacement;
+                Vector3d ray_origin = camera_position + Vector3d(s[p].x(), s[p].y(), 0);
+                Vector3d ray_direction = (random_point - ray_origin).normalized();
+                C += shoot_ray(ray_origin, ray_direction, max_bounce);
             }
-            else
-            {
-                // Orthographic camera
-                ray_origin = camera_position + Vector3d(pixel_center[0], pixel_center[1], 0);
-                ray_direction = Vector3d(0, 0, -1);
-            }
+            C = C / N;
 
-            const Vector4d C = shoot_ray(ray_origin, ray_direction, max_bounce);
+            
+
+            // if (is_perspective)
+            // {
+            //     // DONE: Perspective camera
+            //     ray_origin = camera_position;
+            //     ray_direction = (pixel_center - camera_position).normalized();
+            // }
+            // else
+            // {
+            //     // Orthographic camera
+            //     ray_origin = camera_position + Vector3d(pixel_center[0], pixel_center[1], 0);
+            //     ray_direction = Vector3d(0, 0, -1);
+            // }
+
+            // const Vector4d C = shoot_ray(ray_origin, ray_direction, max_bounce);
             R(i, j) = C(0);
             G(i, j) = C(1);
             B(i, j) = C(2);
