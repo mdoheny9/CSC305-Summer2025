@@ -361,4 +361,8 @@ CMakeFiles/assignment3.dir/src/main.cpp.o: \
  /mnt/c/Users/megan/Documents/CSC305-Summer2025/ext/eigen/Eigen/src/Eigenvalues/GeneralizedEigenSolver.h \
  /mnt/c/Users/megan/Documents/CSC305-Summer2025/ext/eigen/Eigen/src/Eigenvalues/RealQZ.h \
  /mnt/c/Users/megan/Documents/CSC305-Summer2025/ext/eigen/Eigen/src/Eigenvalues/MatrixBaseEigenvalues.h \
- /usr/include/c++/11/math.h
+ /usr/include/c++/11/math.h /usr/include/c++/11/random \
+ /usr/include/c++/11/bits/random.h \
+ /usr/include/x86_64-linux-gnu/c++/11/bits/opt_random.h \
+ /usr/include/c++/11/bits/random.tcc /usr/include/c++/11/numeric \
+ /usr/include/c++/11/bits/stl_numeric.h
