@@ -25,7 +25,7 @@ const double near_plane = 1.5;       //AKA focal length
 const double far_plane = near_plane * 100;
 const double field_of_view = 0.7854; //45 degrees
 const double aspect_ratio = 1.5;
-const bool is_perspective = true;
+const bool is_perspective = false;
 const Vector3d camera_position(0, 0, 3);
 const Vector3d camera_gaze(0, 0, -1);
 const Vector3d camera_top(0, 1, 0);
@@ -97,24 +97,58 @@ void setup_scene()
     light_colors.emplace_back(16, 16, 16);
 }
 
-void build_uniform(UniformAttributes &uniform)
-{
+void build_uniform(UniformAttributes &uniform) {
+    /* 
+    Constructing camera reference system given:
+        1. eye position e
+        2. gaze direction g
+        3. view-up vector t
+    */
     //TODO: setup uniform
 
     //TODO: setup camera, compute w, u, v
+    const Vector3d w = (-camera_gaze).normalized(); // w = -g/||g||
+    const Vector3d u = camera_top.cross(w).normalized(); // u = (t\times w)/(||t\times w||)
+    const Vector3d v = w.cross(u); // v = w \times u
 
     //TODO: compute the camera transformation
+    Matrix3d R; // rows are u^T, v^T, w^T
+    R.row(0) = u.transpose();
+    R.row(1) = v.transpose();
+    R.row(2) = w.transpose();
+
+    Matrix4d M_cam = Matrix4d::Identity();
+    M_cam.block<3,3>(0,0) = R;
+    M_cam.block<3,1>(0,3) = -R * camera_position; // translation part
+
 
     //TODO: setup projection matrix
-
-    Matrix4d P;
+    Matrix4d M_orth = Matrix4d::Identity();
     if (is_perspective)
     {
         //TODO setup prespective camera
     }
     else
     {
+        // orthographic camera
+        double n = near_plane;
+        double f = far_plane;
+
+        // Compute top (t) and right (r) from FOV, match near-plane size
+        double t = std::tan(field_of_view / 2.0) * n;
+        double r = aspect_ratio * t;
+        double b = -t;
+        double l = -r;
+
+        M_orth(0,0) = 2.0 / (r - l);
+        M_orth(1,1) = 2.0 / (t - b);
+        M_orth(2,2) = -2.0 / (f - n);
+        M_orth(0,3) = -(r + l) / (r - l);
+        M_orth(1,3) = -(t + b) / (t - b);
+        M_orth(2,3) = -(f + n) / (f - n);
     }
+    uniform.view = M_cam;
+    uniform.projective = M_orth;
 }
 
 void simple_render(Eigen::Matrix<FrameBufferAttributes, Eigen::Dynamic, Eigen::Dynamic> &frameBuffer)
@@ -125,21 +159,50 @@ void simple_render(Eigen::Matrix<FrameBufferAttributes, Eigen::Dynamic, Eigen::D
 
     program.VertexShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
         //TODO: fill the shader
-        return va;
+        VertexAttributes vout = va;
+
+        Eigen::Vector4d p_obj  = va.position;                    // (x,y,z,1)
+        Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_obj;   // clip
+        const double w = p_clip[3];
+        Eigen::Vector3d ndc = p_clip.head<3>() / w;               // NDC
+
+        vout.position = Eigen::Vector4d(ndc.x(), ndc.y(), ndc.z(), 1.0);
+        return vout;
     };
 
     program.FragmentShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
         //TODO: fill the shader
-        return FragmentAttributes(1, 0, 0);
+        FragmentAttributes fa(1, 0, 0, 1);   // solid red
+        fa.depth = va.position[2];           // NDC z in [-1,1] → definitely < 2
+        return fa;
     };
 
     program.BlendingShader = [](const FragmentAttributes &fa, const FrameBufferAttributes &previous) {
         //TODO: fill the shader
-        return FrameBufferAttributes(fa.color[0], fa.color[1], fa.color[2], fa.color[3]);
+        FrameBufferAttributes out = previous;
+
+        // If your framebuffer initializes depth to +inf, this keeps nearest
+        if (fa.depth < previous.depth) {
+            out.color[0] = fa.color[0];
+            out.color[1] = fa.color[1];
+            out.color[2] = fa.color[2];
+            out.color[3] = fa.color[3];
+            out.depth    = fa.depth;
+        }
+        return out;
     };
 
     std::vector<VertexAttributes> vertex_attributes;
     //TODO: build the vertex attributes from vertices and facets
+    vertex_attributes.reserve(facets.rows() * 3);
+    for (int f = 0; f < facets.rows(); ++f) {
+        for (int k = 0; k < 3; ++k) {
+            const int idx = facets(f, k);
+            vertex_attributes.emplace_back(
+                vertices(idx,0), vertices(idx,1), vertices(idx,2), 1.0
+            );
+        }
+    }
 
     rasterize_triangles(program, uniform, vertex_attributes, frameBuffer);
 }

@@ -43,9 +43,12 @@ int main()
     vector<VertexAttributes> vertices;
     vertices.push_back(VertexAttributes(-1, -1, 0));
     vertices.push_back(VertexAttributes(1, -1, 0));
+    vertices.push_back(VertexAttributes(1, -1, 0));
     vertices.push_back(VertexAttributes(0, 1, 0));
+    vertices.push_back(VertexAttributes(0, 1, 0));
+    vertices.push_back(VertexAttributes(-1, -1, 0));
 
-    rasterize_triangles(program, uniform, vertices, frameBuffer);
+    rasterize_lines(program, uniform, vertices, 3, frameBuffer);
 
     vector<uint8_t> image;
     framebuffer_to_uint8(frameBuffer, image);

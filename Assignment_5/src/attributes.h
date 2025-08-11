@@ -33,9 +33,11 @@ public:
     FragmentAttributes(double r = 0, double g = 0, double b = 0, double a = 1)
     {
         color << r, g, b, a;
+        depth = 2;
     }
 
     Eigen::Vector4d color;
+    double depth;
 };
 
 class FrameBufferAttributes
@@ -44,12 +46,16 @@ public:
     FrameBufferAttributes(double r = 0, double g = 0, double b = 0, double a = 1)
     {
         color << r, g, b, a;
+        depth = 2;
     }
 
     Eigen::Matrix<double, 4, 1> color;
+    double depth;
 };
 
 class UniformAttributes
 {
 public:
+    Eigen::Matrix4d view;
+    Eigen::Matrix4d projective;
 };
