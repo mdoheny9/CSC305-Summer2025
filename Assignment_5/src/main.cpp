@@ -219,30 +219,69 @@ void wireframe_render(const double alpha, Eigen::Matrix<FrameBufferAttributes, E
 {
     UniformAttributes uniform;
     build_uniform(uniform);
-    Program program;
 
     Matrix4d trafo = compute_rotation(alpha);
+    Program program;
 
     program.VertexShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
         //TODO: fill the shader
-        return va;
+        VertexAttributes vout = va;
+
+        Eigen::Vector4d p_obj  = va.position;                    // (x,y,z,1)
+        Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_obj;   // clip
+        const double w = p_clip[3];
+        Eigen::Vector3d ndc = p_clip.head<3>() / w;               // NDC
+
+        vout.position = Eigen::Vector4d(ndc.x(), ndc.y(), ndc.z(), 1.0);
+        return vout;
     };
 
     program.FragmentShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
         //TODO: fill the shader
-        return FragmentAttributes(1, 0, 0);
+        FragmentAttributes fa(1, 0, 0, 1);   // solid red
+        fa.depth = va.position[2];           // NDC z in [-1,1] → definitely < 2
+        return fa;
     };
 
     program.BlendingShader = [](const FragmentAttributes &fa, const FrameBufferAttributes &previous) {
         //TODO: fill the shader
-        return FrameBufferAttributes(fa.color[0], fa.color[1], fa.color[2], fa.color[3]);
+        FrameBufferAttributes out = previous;
+
+        // If your framebuffer initializes depth to +inf, this keeps nearest
+        if (fa.depth < previous.depth) {
+            out.color[0] = fa.color[0];
+            out.color[1] = fa.color[1];
+            out.color[2] = fa.color[2];
+            out.color[3] = fa.color[3];
+            out.depth    = fa.depth;
+        }
+        return out;
     };
 
     std::vector<VertexAttributes> vertex_attributes;
 
     //TODO: generate the vertex attributes for the edges and rasterize the lines
-    //TODO: use the transformation matrix
+    vertex_attributes.reserve(facets.rows() * 6); // 2 vertices per edge, 3 edges per triangle
+    // Create edges from facets
+    for (int f = 0; f < facets.rows(); ++f) {
+        int i0 = facets(f, 0);
+        int i1 = facets(f, 1);
+        int i2 = facets(f, 2);
 
+        // Edge 0-1
+        vertex_attributes.emplace_back(vertices(i0,0), vertices(i0,1), vertices(i0,2), 1.0);
+        vertex_attributes.emplace_back(vertices(i1,0), vertices(i1,1), vertices(i1,2), 1.0);
+
+        // Edge 1-2
+        vertex_attributes.emplace_back(vertices(i1,0), vertices(i1,1), vertices(i1,2), 1.0);
+        vertex_attributes.emplace_back(vertices(i2,0), vertices(i2,1), vertices(i2,2), 1.0);
+
+        // Edge 2-0
+        vertex_attributes.emplace_back(vertices(i2,0), vertices(i2,1), vertices(i2,2), 1.0);
+        vertex_attributes.emplace_back(vertices(i0,0), vertices(i0,1), vertices(i0,2), 1.0);
+    }
+
+    //TODO: use the transformation matrix
     rasterize_lines(program, uniform, vertex_attributes, 0.5, frameBuffer);
 }
 
@@ -306,9 +345,9 @@ int main(int argc, char *argv[])
     Eigen::Matrix<FrameBufferAttributes, Eigen::Dynamic, Eigen::Dynamic> frameBuffer(W, H);
     vector<uint8_t> image;
 
-    simple_render(frameBuffer);
-    framebuffer_to_uint8(frameBuffer, image);
-    stbi_write_png("simple.png", frameBuffer.rows(), frameBuffer.cols(), 4, image.data(), frameBuffer.rows() * 4);
+    // simple_render(frameBuffer);
+    // framebuffer_to_uint8(frameBuffer, image);
+    // stbi_write_png("simple.png", frameBuffer.rows(), frameBuffer.cols(), 4, image.data(), frameBuffer.rows() * 4);
 
     wireframe_render(0, frameBuffer);
     framebuffer_to_uint8(frameBuffer, image);
