@@ -58,4 +58,5 @@ class UniformAttributes
 public:
     Eigen::Matrix4d view;
     Eigen::Matrix4d projective;
+    Eigen::Matrix4d model = Eigen::Matrix4d::Identity();
 };

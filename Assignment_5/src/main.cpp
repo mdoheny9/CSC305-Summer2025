@@ -212,6 +212,24 @@ Matrix4d compute_rotation(const double alpha)
     //TODO: Compute the rotation matrix of angle alpha on the y axis around the object barycenter
     Matrix4d res;
 
+    Eigen::Vector3d barycenter = vertices.colwise().mean();;
+
+    Eigen::Matrix4d T1 = Matrix4d::Identity();
+    T1.block<3,1>(0,3) = -barycenter;
+
+    Eigen::Matrix4d T2 = Matrix4d::Identity();
+    T2.block<3,1>(0,3) = barycenter;
+
+    Eigen::Matrix4d R = Matrix4d::Identity();
+    double c = cos(alpha);
+    double s = sin(alpha);
+
+    // Rotation matrix around Y-axis
+    R(0,0) = c;  R(0,2) = s;
+    R(2,0) = -s; R(2,2) = c;
+
+    res = T2 * R * T1;
+
     return res;
 }
 
@@ -223,12 +241,13 @@ void wireframe_render(const double alpha, Eigen::Matrix<FrameBufferAttributes, E
     Matrix4d trafo = compute_rotation(alpha);
     Program program;
 
-    program.VertexShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
+    program.VertexShader = [trafo](const VertexAttributes &va, const UniformAttributes &uniform) {
         //TODO: fill the shader
         VertexAttributes vout = va;
 
         Eigen::Vector4d p_obj  = va.position;                    // (x,y,z,1)
-        Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_obj;   // clip
+        Eigen::Vector4d p_world = trafo * p_obj;
+        Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_world;   // clip
         const double w = p_clip[3];
         Eigen::Vector3d ndc = p_clip.head<3>() / w;               // NDC
 
@@ -361,7 +380,20 @@ int main(int argc, char *argv[])
     framebuffer_to_uint8(frameBuffer, image);
     stbi_write_png("pv_shading.png", frameBuffer.rows(), frameBuffer.cols(), 4, image.data(), frameBuffer.rows() * 4);
 
-    //TODO: add the animation
+    //TODO: add the animation =======================================================
+    const char* filename = "rotation.gif";
+    GifWriter g;
+    int delay = 25;
+    GifBegin(&g, filename, frameBuffer.rows(), frameBuffer.cols(), delay);
 
+    for (double angle = 0; angle < 8 * M_PI; angle += 0.15)
+    {
+        frameBuffer.setConstant(FrameBufferAttributes());
+        wireframe_render(angle, frameBuffer);  // or flat_shading(angle, frameBuffer), etc.
+        framebuffer_to_uint8(frameBuffer, image);
+        GifWriteFrame(&g, image.data(), frameBuffer.rows(), frameBuffer.cols(), delay);
+    }
+
+    GifEnd(&g);
     return 0;
 }
