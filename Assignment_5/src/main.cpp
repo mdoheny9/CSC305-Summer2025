@@ -212,23 +212,24 @@ Matrix4d compute_rotation(const double alpha)
     //TODO: Compute the rotation matrix of angle alpha on the y axis around the object barycenter
     Matrix4d res;
 
+    // to rotate the object, we must first translate its barycenter to the origin, 
+    // apply the rotation, and then translate it back to its original location.
+
     Eigen::Vector3d barycenter = vertices.colwise().mean();;
 
-    Eigen::Matrix4d T1 = Matrix4d::Identity();
-    T1.block<3,1>(0,3) = -barycenter;
+    Eigen::Matrix4d T_to_origin = Matrix4d::Identity(); // translates object to origin
+    T_to_origin.block<3,1>(0,3) = -barycenter;
 
-    Eigen::Matrix4d T2 = Matrix4d::Identity();
-    T2.block<3,1>(0,3) = barycenter;
+    Eigen::Matrix4d T_back = Matrix4d::Identity(); // translates object to original location
+    T_back.block<3,1>(0,3) = barycenter;
 
-    Eigen::Matrix4d R = Matrix4d::Identity();
-    double c = cos(alpha);
-    double s = sin(alpha);
+    Eigen::Matrix4d R = Matrix4d::Identity(); // rotates object around z-axis
+    R(0,0) = cos(alpha);  
+    R(0,2) = sin(alpha);
+    R(2,0) = -sin(alpha); 
+    R(2,2) = cos(alpha);
 
-    // Rotation matrix around Y-axis
-    R(0,0) = c;  R(0,2) = s;
-    R(2,0) = -s; R(2,2) = c;
-
-    res = T2 * R * T1;
+    res = T_back * R * T_to_origin; // move to origin, apply rotation, move back.
 
     return res;
 }
