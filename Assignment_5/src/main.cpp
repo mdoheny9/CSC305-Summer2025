@@ -25,7 +25,7 @@ const double near_plane = 1.5;       //AKA focal length
 const double far_plane = near_plane * 100;
 const double field_of_view = 0.7854; //45 degrees
 const double aspect_ratio = 1.5;
-const bool is_perspective = false;
+const bool is_perspective = true;
 const Vector3d camera_position(0, 0, 3);
 const Vector3d camera_gaze(0, 0, -1);
 const Vector3d camera_top(0, 1, 0);
@@ -107,34 +107,44 @@ void build_uniform(UniformAttributes &uniform) {
     //TODO: setup uniform
 
     //TODO: setup camera, compute w, u, v
-    const Vector3d w = (-camera_gaze).normalized(); // w = -g/||g||
-    const Vector3d u = camera_top.cross(w).normalized(); // u = (t\times w)/(||t\times w||)
+    const Vector3d w = -(camera_gaze).normalized(); // w = -g/||g||
+    const Vector3d u = (camera_top.cross(w)).normalized(); // u = (t\times w)/(||t\times w||)
     const Vector3d v = w.cross(u); // v = w \times u
 
     //TODO: compute the camera transformation
-    Matrix3d R; // rows are u^T, v^T, w^T
+    Matrix3d R; // R = u^T, v^T, w^T
     R.row(0) = u.transpose();
     R.row(1) = v.transpose();
     R.row(2) = w.transpose();
 
     Matrix4d M_cam = Matrix4d::Identity();
     M_cam.block<3,3>(0,0) = R;
-    M_cam.block<3,1>(0,3) = -R * camera_position; // translation part
-
+    M_cam.block<3,1>(0,3) = -R * camera_position;
 
     //TODO: setup projection matrix
     Matrix4d M_orth = Matrix4d::Identity();
+    Matrix4d M_per = Matrix4d::Zero();
     if (is_perspective)
     {
         //TODO setup prespective camera
+        double n = near_plane;
+        double f = far_plane;
+        double t = std::tan(field_of_view/2.0) * n;
+        double r = aspect_ratio * t;
+
+        M_per(0,0) = n/r;
+        M_per(1,1) = n/t;
+        M_per(2,2) = -(f+n)/(f-n);
+        M_per(2,3) = (-2*f*n)/(f-n);
+        M_per(3,2) = -1;
+
+        uniform.projective = M_per;
     }
     else
     {
         // orthographic camera
         double n = near_plane;
         double f = far_plane;
-
-        // Compute top (t) and right (r) from FOV, match near-plane size
         double t = std::tan(field_of_view / 2.0) * n;
         double r = aspect_ratio * t;
         double b = -t;
@@ -146,9 +156,10 @@ void build_uniform(UniformAttributes &uniform) {
         M_orth(0,3) = -(r + l) / (r - l);
         M_orth(1,3) = -(t + b) / (t - b);
         M_orth(2,3) = -(f + n) / (f - n);
+
+        uniform.projective = M_orth;
     }
     uniform.view = M_cam;
-    uniform.projective = M_orth;
 }
 
 void simple_render(Eigen::Matrix<FrameBufferAttributes, Eigen::Dynamic, Eigen::Dynamic> &frameBuffer)
@@ -161,10 +172,10 @@ void simple_render(Eigen::Matrix<FrameBufferAttributes, Eigen::Dynamic, Eigen::D
         //TODO: fill the shader
         VertexAttributes vout = va;
 
-        Eigen::Vector4d p_obj  = va.position;                    // (x,y,z,1)
-        Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_obj;   // clip
+        Eigen::Vector4d p_obj  = va.position; // (x,y,z,1)
+        Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_obj; // clip
         const double w = p_clip[3];
-        Eigen::Vector3d ndc = p_clip.head<3>() / w;               // NDC
+        Eigen::Vector3d ndc = p_clip.head<3>() / w; // NDC
 
         vout.position = Eigen::Vector4d(ndc.x(), ndc.y(), ndc.z(), 1.0);
         return vout;
@@ -240,14 +251,16 @@ void wireframe_render(const double alpha, Eigen::Matrix<FrameBufferAttributes, E
     build_uniform(uniform);
 
     Matrix4d trafo = compute_rotation(alpha);
+    uniform.transform = trafo;
+
     Program program;
 
-    program.VertexShader = [trafo](const VertexAttributes &va, const UniformAttributes &uniform) {
+    program.VertexShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
         //TODO: fill the shader
         VertexAttributes vout = va;
 
         Eigen::Vector4d p_obj  = va.position;                    // (x,y,z,1)
-        Eigen::Vector4d p_world = trafo * p_obj;
+        Eigen::Vector4d p_world = uniform.transform * p_obj;
         Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_world;   // clip
         const double w = p_clip[3];
         Eigen::Vector3d ndc = p_clip.head<3>() / w;               // NDC
@@ -308,19 +321,98 @@ void wireframe_render(const double alpha, Eigen::Matrix<FrameBufferAttributes, E
 void get_shading_program(Program &program)
 {
     program.VertexShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
-        //TODO: transform the position and the normal
-        //TODO: compute the correct lighting
+        // //TODO: transform the position and the normal
+        // VertexAttributes vout = va;
+
+        // Eigen::Vector4d p_obj = va.position; // object space position
+        // Eigen::Vector4d p_world = uniform.transform * p_obj; // model/world space position
+        // Eigen::Vector4d p_clip = uniform.projective * uniform.view * p_world; // view space position
+
+        // // Perspective divide to get NDC
+        // const double w = p_clip[3];
+        // Eigen::Vector3d ndc = p_clip.head<3>() / w;
+        // vout.position = Eigen::Vector4d(ndc.x(), ndc.y(), ndc.z(), 1.0); // copy attributes to vout
+        
+        // // vout.normal = uniform.transform * va.normal;
+        // Eigen::Matrix3d M = uniform.transform.block<3,3>(0,0);
+        // Eigen::Matrix3d N = M.inverse().transpose();
+        // Eigen::Vector3d n_obj   = va.normal.head<3>();
+        // Eigen::Vector3d n_world = (N * n_obj).normalized();
+        // vout.normal = Eigen::Vector4d(n_world.x(), n_world.y(), n_world.z(), 0.0);
+
+        // //TODO: compute the correct lighting
+        // Eigen::Vector3d p = p_world.head<3>();
+        // Eigen::Vector3d V = (camera_position - p).normalized();
+
+        // Vector3d lights_color(0, 0, 0);
+        // for (int i = 0; i < light_positions.size(); i++) {
+        //     const Eigen::Vector3d &Lpos   = light_positions[i];
+        //     const Eigen::Vector3d &Lcolor = light_colors[i];
+
+        //     Eigen::Vector3d D  = Lpos - p;
+        //     double dist2       = std::max(1e-9, D.squaredNorm());
+        //     Eigen::Vector3d L  = D.normalized();                 // light dir
+        //     Eigen::Vector3d H  = (L + V).normalized();           // half vector
+
+        //     // Diffuse
+        //     double ndotl = std::max(0.0, n_world.dot(L));
+        //     Eigen::Vector3d diffuse  = obj_diffuse_color * ndotl;
+
+        //     // Specular
+        //     double ndoth = std::max(0.0, n_world.dot(H));
+        //     Eigen::Vector3d specular = obj_specular_color * std::pow(ndoth, obj_specular_exponent);
+
+        //     lights_color += (diffuse + specular).cwiseProduct(Lcolor) / dist2;
+
+        //     // const Vector3d &light_position = light_positions[i];
+        //     // const Vector3d &light_color = light_colors[i];
+
+        //     // Vector3d p(vout.position(0), vout.position(1), vout.position(2));
+        //     // Vector3d normal(vout.normal(0), vout.normal(1), vout.normal(2)); // there might be smth here
+
+        //     // const Vector3d Li = (light_position - p).normalized();
+
+        //     // const Vector3d diffuse = obj_diffuse_color * std::max(Li.dot(normal), 0.0);
+        //     // Vector3d v = (camera_position - p).normalized();
+
+        //     // const Vector3d h = ((camera_position - p).normalized() + Li).normalized();
+        //     // const Vector3d specular = obj_specular_color*std::pow(std::max(normal.dot(h), 0.0), obj_specular_exponent);
+        //     // const Vector3d D = light_position - p;
+        //     // lights_color += (diffuse + specular).cwiseProduct(light_color) / D.squaredNorm();
+        // }
+        // vout.colour = lights_color + ambient_light;
+        // return vout;
         return va;
     };
 
     program.FragmentShader = [](const VertexAttributes &va, const UniformAttributes &uniform) {
-        //TODO: create the correct fragment
-        return FragmentAttributes(1, 0, 0);
+        // //TODO: create the correct fragment
+        // FragmentAttributes faout = FragmentAttributes(va.colour[0], va.colour[1], va.colour[2]);
+        // if (is_perspective)
+        // {
+        //     faout.depth = va.position[2];
+        // }
+        // else
+        // {
+        //     faout.depth = va.position[2]; // could be smth here
+        // }
+        // return faout;
+        return FragmentAttributes(va.colour[0], va.colour[1], va.colour[2]);
     };
 
     program.BlendingShader = [](const FragmentAttributes &fa, const FrameBufferAttributes &previous) {
-        //TODO: implement the depth check
-        return FrameBufferAttributes(fa.color[0], fa.color[1], fa.color[2], fa.color[3]);
+        // //TODO: implement the depth check
+        // FrameBufferAttributes out = previous;
+        // if (fa.depth < previous.depth)
+        // {
+        //     out.color[0] = std::min(255.0, std::max(0.0, fa.color[0] * 255));
+        //     out.color[1] = std::min(255.0, std::max(0.0, fa.color[1] * 255));
+        //     out.color[2] = std::min(255.0, std::max(0.0, fa.color[2] * 255));
+        //     out.color[3] = 255;
+        //     out.depth = fa.depth;
+        // }
+        // return out;
+        return previous;
     };
 }
 
@@ -346,13 +438,60 @@ void pv_shading(const double alpha, Eigen::Matrix<FrameBufferAttributes, Eigen::
     Program program;
     get_shading_program(program);
 
-    Eigen::Matrix4d trafo = compute_rotation(alpha);
+    // Eigen::Matrix4d trafo = compute_rotation(alpha);
+    // uniform.transform = trafo;
 
-    //TODO: compute the vertex normals as vertex normal average
+    // //TODO: compute the vertex normals as vertex normal average
 
     std::vector<VertexAttributes> vertex_attributes;
-    //TODO: create vertex attributes
-    //TODO: set material colors
+    // //TODO: create vertex attributes
+    // //TODO: set material colors
+    // Eigen::MatrixXd vertex_normal(vertices.rows(), 3);
+    // vertex_normal.setZero();
+
+    // for (int i = 0; i < facets.rows(); i++)
+    // {
+    //     Vector3i r = facets.row(i);
+    //     Vector3d a = vertices.row(r(0));
+    //     Vector3d b = vertices.row(r(1));
+    //     Vector3d c = vertices.row(r(2));
+
+    //     // compute face normal
+    //     Vector3d normal = (b - a).cross(c - a).normalized();
+
+    //     vertex_normal.row(r(0)) += normal;
+    //     vertex_normal.row(r(1)) += normal;
+    //     vertex_normal.row(r(2)) += normal;
+    // }
+
+    // // for (int i = 0; i < facets.rows(); i++)
+    // // {
+    // //     Vector3i r = facets.row(i);
+    // //     for (int j = 0; j < 3; j++)
+    // //     {
+    // //         VertexAttributes v(vertices(r(j), 0), vertices(r(j), 1), vertices(r(j), 2));
+    // //         Vector3d n = vertex_normal.row(r(j)).normalized();
+    // //         Vector4d normal4(n(0), n(1), n(2), 0);
+    // //         v.normal = Vector4d((n(0), n(1), n(2), 0));
+    // //         vertex_attributes.push_back(v);
+    // //     }
+    // // }
+    // vertex_attributes.reserve(facets.rows() * 3);
+
+    // for (int i = 0; i < facets.rows(); ++i)
+    // {
+    //     Eigen::Vector3i r = facets.row(i);
+    //     for (int j = 0; j < 3; ++j)
+    //     {
+    //         int idx = r(j);
+    //         VertexAttributes v(vertices(idx,0), vertices(idx,1), vertices(idx,2), 1.0);
+
+    //         Eigen::Vector3d n = vertex_normal.row(idx);
+    //         v.normal = Eigen::Vector4d(n.x(), n.y(), n.z(), 0.0); // <-- SEND NORMALS!
+
+    //         vertex_attributes.push_back(v);
+    //     }
+    // }
 
     rasterize_triangles(program, uniform, vertex_attributes, frameBuffer);
 }
